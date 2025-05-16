@@ -7,14 +7,14 @@
 #include "utils.h"
 
 #define MAX_CHOICE 100
-// Structures
+
 typedef struct {
     char nom[100];
     char prenom[100];
     int age;
     char profession[100];
     char identifiant[100];
-    char motdepasse[100]; // <-- mot de passe ajouté ici
+    char motdepasse[100];
     char type_chambre[100];
     char date_arrivee[11];
     char date_depart[11];
@@ -26,19 +26,9 @@ typedef struct {
     char service[100];
     char chambre[100];
     char date[11];
-    char heure[6];
     float prix;
     int payee;
 } ServiceReservation;
-
-typedef struct {
-    char identifiant[100];
-    char nom[100];
-    char plat[100];
-    char date[11];
-    char heure[6];
-    float prix;
-} Commande;
 
 typedef struct {
     char nom[100];
@@ -67,41 +57,31 @@ Chambre chambres[] = {
 };
 int nb_chambres = sizeof(chambres) / sizeof(chambres[0]);
 
-typedef struct {
-    char nom[100];
-    float prix;
-} Nourriture;
-
-Nourriture nourriture[] = {
-    {"Riz au Poulet", 5000},
-    {"Poisson Grillé", 7000},
-    {"Steak Frites", 8000},
-    {"Pâtes Carbonara", 6000},
-    {"Salade César", 4500}
-};
-int nb_nourriture = sizeof(nourriture) / sizeof(nourriture[0]);
-
-typedef enum {
-    CARTE_BANCAIRE,
-    ESPECES,
-    VIREMENT_BANCAIRE
-} ModePaiement;
-
 const char *modes_paiement[] = {
     "💳 Carte bancaire",
     "💵 Espèces",
     "🏦 Virement bancaire"
 };
 
+// Prototypes
+void sInscrire();
+int seConnecter(char *identifiant);
+void reservation(const char *identifiant_client);
+void paiement();
+void consulterReservations(const char *identifiant);
+void afficherReservations();
+void AjouterClient(Client c);
+void saisirMotDePasse(char *motdepasse, int maxLen);
+
+// Génère l'identifiant suivant (auto-incrémenté à partir de 0)
 int lastGetId() {
     FILE *f = fopen("clients.csv", "r");
-    if (!f) return 1; // Premier ID
+    if (!f) return 0; // Premier ID = 0
     char ligne[512];
-    int lastId = 0;
+    int lastId = -1;
     while (fgets(ligne, sizeof(ligne), f)) {
         char tmp[100];
         int id;
-        // On suppose que l'identifiant est le 5e champ
         sscanf(ligne, "%*[^,],%*[^,],%*[^,],%*[^,],%[^,]", tmp);
         id = atoi(tmp);
         if (id > lastId) lastId = id;
@@ -110,64 +90,7 @@ int lastGetId() {
     return lastId + 1;
 }
 
-void consulterReservations(const char *identifiant) {
-    FILE *f = fopen("reservations.csv", "r");
-    if (!f) {
-        setColor(12);
-        printf("Aucune réservation trouvée.\n");
-        setColor(7);
-        return;
-    }
-    ServiceReservation r;
-    char ligne[512];
-    float total = 0;
-    int trouve = 0;
-    setColor(11);
-    printf("=== Vos réservations ===\n");
-    setColor(7);
-    while (fgets(ligne, sizeof(ligne), f)) {
-        sscanf(ligne, "%[^,],%[^,],%[^,],%[^,],%[^,],%f,%d",
-            r.identifiant, r.nom, r.service, r.chambre, r.date, &r.prix, &r.payee);
-        if (strcmp(r.identifiant, identifiant) == 0) {
-            trouve = 1;
-            printf("Service : %s | Chambre : %s | Date : %s | Prix : %.0f FCFA | Payée : %s\n",
-                r.service, r.chambre, r.date, r.prix, r.payee ? "Oui" : "Non");
-            total += r.prix;
-        }
-    }
-    fclose(f);
-    if (trouve) {
-        setColor(14);
-        printf("\nPrix total de vos réservations : %.0f FCFA\n", total);
-        setColor(7);
-    } else {
-        setColor(12);
-        printf("Aucune réservation trouvée pour votre identifiant.\n");
-        setColor(7);
-    }
-    printf("Appuyez sur une touche pour revenir au menu client...");
-    getch();
-}
-
-// Fonction pour masquer l'identifiant lors de la saisie
-void saisirIdentifiantMasque(char *identifiant) {
-    int i = 0;
-    char ch;
-    printf("Entrez votre identifiant : ");
-    while ((ch = getch()) != '\r') {
-        if (ch == '\b' && i > 0) {
-            printf("\b \b");
-            i--;
-        } else if (ch != '\b' && i < 99) {
-            identifiant[i++] = ch;
-            printf("*");
-        }
-    }
-    identifiant[i] = '\0';
-    printf("\n");
-}
-
-// Fonction pour saisir un mot de passe masqué
+// Saisie masquée du mot de passe
 void saisirMotDePasse(char *motdepasse, int maxLen) {
     int i = 0;
     char ch;
@@ -184,7 +107,7 @@ void saisirMotDePasse(char *motdepasse, int maxLen) {
     printf("\n");
 }
 
-// Fonction pour enregistrer un client
+// Ajoute un client au fichier
 void AjouterClient(Client c) {
     FILE *f = fopen("clients.csv", "a+");
     if (!f) {
@@ -195,7 +118,7 @@ void AjouterClient(Client c) {
     }
     fprintf(f, "%s,%s,%d,%s,%s,%s,%s,%s,%s\n",
         c.nom, c.prenom, c.age, c.profession,
-        c.identifiant, c.motdepasse, // <-- mot de passe ici
+        c.identifiant, c.motdepasse,
         c.type_chambre, c.date_arrivee, c.date_depart);
     fclose(f);
     setColor(10);
@@ -203,60 +126,139 @@ void AjouterClient(Client c) {
     setColor(7);
 }
 
-// Fonction pour vérifier si un identifiant existe déjà
-int verifier_identifiants(const char *identifiant) {
+// Inscription client
+void sInscrire() {
+    Client c;
+    system("cls");
+    setColor(11);
+    printf("===== INSCRIPTION CLIENT =====\n");
+    setColor(7);
+
+    printf("Nom : ");
+    scanf(" %[^\n]", c.nom);
+    printf("Prénom : ");
+    scanf(" %[^\n]", c.prenom);
+    printf("Âge : ");
+    scanf("%d", &c.age);
+    printf("Profession : ");
+    scanf(" %[^\n]", c.profession);
+
+    int id = lastGetId();
+    sprintf(c.identifiant, "%d", id);
+    printf("Votre identifiant attribué automatiquement est : %s\n", c.identifiant);
+
+    printf("Mot de passe : ");
+    saisirMotDePasse(c.motdepasse, sizeof(c.motdepasse));
+
+    printf("Type de chambre (Standard/Suite/Deluxe) : ");
+    scanf(" %[^\n]", c.type_chambre);
+    printf("Date d'arrivée (YYYY-MM-DD) : ");
+    scanf(" %[^\n]", c.date_arrivee);
+    printf("Date de départ (YYYY-MM-DD) : ");
+    scanf(" %[^\n]", c.date_depart);
+
+    AjouterClient(c);
+    printf("Inscription terminée !\n");
+    printf("Appuyez sur une touche pour continuer...");
+    getch();
+}
+
+// Connexion client
+int seConnecter(char *identifiant) {
+    char nom[100], motdepasse[100];
+    int trouve = 0;
+    system("cls");
+    setColor(11);
+    printf("===== CONNEXION CLIENT =====\n");
+    setColor(7);
+
+    printf("Nom : ");
+    scanf(" %[^\n]", nom);
+    printf("Mot de passe : ");
+    saisirMotDePasse(motdepasse, sizeof(motdepasse));
+
     FILE *f = fopen("clients.csv", "r");
-    if (!f) return 0;
+    if (!f) {
+        setColor(12);
+        printf("Erreur d'ouverture du fichier clients.csv\n");
+        setColor(7);
+        return 0;
+    }
     char ligne[512];
     while (fgets(ligne, sizeof(ligne), f)) {
-        char id[100];
-        sscanf(ligne, "%*[^,],%*[^,],%*[^,],%*[^,],%[^,]", id);
-        if (strcmp(id, identifiant) == 0) {
-            fclose(f);
-            return 1;
+        Client c;
+        sscanf(ligne, "%[^,],%[^,],%d,%[^,],%[^,],%[^,],%[^,],%[^,],%[^,\n]",
+            c.nom, c.prenom, &c.age, c.profession, c.identifiant, c.motdepasse,
+            c.type_chambre, c.date_arrivee, c.date_depart);
+        if (strcmp(c.nom, nom) == 0 && strcmp(c.motdepasse, motdepasse) == 0) {
+            strcpy(identifiant, c.identifiant);
+            trouve = 1;
+            break;
         }
     }
     fclose(f);
-    return 0;
+
+    if (trouve) {
+        setColor(10);
+        printf("Connexion réussie !\n");
+        setColor(7);
+        return 1;
+    } else {
+        setColor(12);
+        printf("Nom ou mot de passe incorrect.\n");
+        setColor(7);
+        return 0;
+    }
 }
 
-// Fonction de réservation (avec saisie classique)
-void reservation() {
+// Réservation d'un service ou d'une chambre
+void reservation(const char *identifiant_client) {
     ServiceReservation r;
     time_t t;
     struct tm *tm_info;
     char heure[6];
 
-    // Obtenir l'heure actuelle
+    // Récupère le nom du client à partir de l'identifiant
+    FILE *fc = fopen("clients.csv", "r");
+    char nom_client[100] = "";
+    if (fc) {
+        char ligne[512];
+        while (fgets(ligne, sizeof(ligne), fc)) {
+            Client c;
+            sscanf(ligne, "%[^,],%[^,],%*d,%*[^,],%[^,],%*[^,],%*[^,],%*[^,],%*[^,\n]",
+                c.nom, c.prenom, c.identifiant);
+            if (strcmp(c.identifiant, identifiant_client) == 0) {
+                strcpy(nom_client, c.nom);
+                break;
+            }
+        }
+        fclose(fc);
+    }
+
+    strcpy(r.identifiant, identifiant_client);
+    strcpy(r.nom, nom_client);
+
     time(&t);
     tm_info = localtime(&t);
     strftime(heure, 6, "%H:%M", tm_info);
 
     setColor(11);
-    printf("\n=== 🛎️ Réservation d'un service ===\n");
+    printf("\n=== 🛎️ Réservation d'un service ou d'une chambre ===\n");
     setColor(7);
 
-    // Saisie des informations client
-    printf("Identifiant client : ");
-    char identifiant[100];
-    scanf(" %[^\n]", identifiant);
-
-    printf("Nom du client : ");
-    char nom[100];
-    scanf(" %[^\n]", nom);
-
-    // Sélection du service avec navigation clavier
-    int choix_service = 0;
+    // Menu combiné services + chambres
+    int total_options = nb_services + nb_chambres;
+    int choix = 0;
     while (1) {
         system("cls");
         setColor(11);
-        printf("\n=== 🛎️ Réservation d'un service ===\n");
+        printf("\n=== 🛎️ Réservation d'un service ou d'une chambre ===\n");
         setColor(7);
-        printf("Identifiant client : %s\n", identifiant);
-        printf("Nom du client : %s\n", nom);
-        printf("\nListe des services disponibles :\n");
+        printf("Identifiant client : %s\n", r.identifiant);
+        printf("Nom du client : %s\n", r.nom);
+        printf("\nListe des services et chambres disponibles :\n");
         for (int i = 0; i < nb_services; i++) {
-            if (i == choix_service) {
+            if (i == choix) {
                 setColor(13);
                 printf("→ %d. %s - %.0f FCFA\n", i + 1, services[i].nom, services[i].prix);
                 setColor(7);
@@ -264,39 +266,45 @@ void reservation() {
                 printf("  %d. %s - %.0f FCFA\n", i + 1, services[i].nom, services[i].prix);
             }
         }
+        for (int i = 0; i < nb_chambres; i++) {
+            int idx = nb_services + i;
+            if (idx == choix) {
+                setColor(13);
+                printf("→ %d. Chambre %s - %.0f FCFA\n", idx + 1, chambres[i].type, chambres[i].prix);
+                setColor(7);
+            } else {
+                printf("  %d. Chambre %s - %.0f FCFA\n", idx + 1, chambres[i].type, chambres[i].prix);
+            }
+        }
         printf("\nUtilisez ↑/↓ pour naviguer, Entrée pour valider.\n");
 
         int key = _getch();
         if (key == 224 || key == 0) {
             key = _getch();
-            if (key == 72) choix_service = (choix_service == 0) ? nb_services - 1 : choix_service - 1; // Haut
-            else if (key == 80) choix_service = (choix_service == nb_services - 1) ? 0 : choix_service + 1; // Bas
+            if (key == 72) choix = (choix == 0) ? total_options - 1 : choix - 1;
+            else if (key == 80) choix = (choix == total_options - 1) ? 0 : choix + 1;
         } else if (key == 13) {
             break;
         }
     }
-    strcpy(r.service, services[choix_service].nom);
-    r.prix = services[choix_service].prix;
 
-    // Affichage des chambres
-    printf("\nListe des chambres disponibles :\n");
-    for (int i = 0; i < nb_chambres; i++) {
-        printf(" %d. %s - %.0f FCFA\n", i + 1, chambres[i].type, chambres[i].prix);
+    // Remplissage selon le choix
+    if (choix < nb_services) {
+        // Service classique, pas de choix de chambre
+        strcpy(r.service, services[choix].nom);
+        strcpy(r.chambre, "-");
+        r.prix = services[choix].prix;
+    } else {
+        // Réservation directe d'une chambre
+        int idx_chambre = choix - nb_services;
+        strcpy(r.service, "Chambre");
+        strcpy(r.chambre, chambres[idx_chambre].type);
+        r.prix = chambres[idx_chambre].prix;
     }
-    int choix_chambre = 0;
-    do {
-        printf("Choisissez une chambre (1-%d) : ", nb_chambres);
-        scanf("%d", &choix_chambre);
-    } while (choix_chambre < 1 || choix_chambre > nb_chambres);
 
-    strcpy(r.chambre, chambres[choix_chambre - 1].type);
-    r.prix += chambres[choix_chambre - 1].prix;
-
-    // Saisie de la date de réservation
     printf("Date (YYYY-MM-DD) : ");
     scanf(" %[^\n]", r.date);
 
-    // Sauvegarde de la réservation dans un fichier
     FILE *f = fopen("reservations.csv", "a");
     if (!f) {
         setColor(12);
@@ -315,7 +323,7 @@ void reservation() {
     setColor(7);
 }
 
-// Fonction de paiement avec saisie classique
+// Paiement d'une réservation
 void paiement() {
     char identifiant[100];
     char service[100];
@@ -355,7 +363,7 @@ void paiement() {
         ServiceReservation r;
         sscanf(ligne, "%[^,],%[^,],%[^,],%[^,],%[^,],%f,%d", r.identifiant, r.nom, r.service, r.chambre, r.date, &r.prix, &r.payee);
 
-        if (strcmp(r.identifiant, identifiant) == 1 && strcmp(r.service, service) == 1 && r.payee == 0) {
+        if (strcmp(r.identifiant, identifiant) == 0 && strcmp(r.service, service) == 0 && r.payee == 0) {
             r.payee = 1;
             trouve = 1;
             fprintf(temp, "%s,%s,%s,%s,%s,%.0f,%d\n", r.identifiant, r.nom, r.service, r.chambre, r.date, r.prix, r.payee);
@@ -380,95 +388,73 @@ void paiement() {
     setColor(7);
 }
 
-void sInscrire() {
-    Client c;
-    system("cls");
-    setColor(11);
-    printf("===== INSCRIPTION CLIENT =====\n");
-    setColor(7);
-
-    printf("Nom : ");
-    scanf(" %[^\n]", c.nom);
-    printf("Prénom : ");
-    scanf(" %[^\n]", c.prenom);
-    printf("Âge : ");
-    scanf("%d", &c.age);
-    printf("Profession : ");
-    scanf(" %[^\n]", c.profession);
-
-    do {
-        printf("Identifiant (unique) : ");
-        scanf(" %[^\n]", c.identifiant);
-        if (verifier_identifiants(c.identifiant)) {
-            setColor(12);
-            printf("Cet identifiant existe déjà. Veuillez en choisir un autre.\n");
-            setColor(7);
-        }
-    } while (verifier_identifiants(c.identifiant));
-
-    printf("Mot de passe : ");
-    saisirMotDePasse(c.motdepasse, sizeof(c.motdepasse)); // <-- mot de passe ici
-
-    printf("Type de chambre (Standard/Suite/Deluxe) : ");
-    scanf(" %[^\n]", c.type_chambre);
-    printf("Date d'arrivée (YYYY-MM-DD) : ");
-    scanf(" %[^\n]", c.date_arrivee);
-    printf("Date de départ (YYYY-MM-DD) : ");
-    scanf(" %[^\n]", c.date_depart);
-
-    AjouterClient(c);
-    printf("Inscription terminée !\n");
-    printf("Appuyez sur une touche pour continuer...");
-    getch();
-}
-
-int seConnecter(char *identifiant) {
-    char nom[100], motdepasse[100];
-    int trouve = 0;
-    system("cls");
-    setColor(11);
-    printf("===== CONNEXION CLIENT =====\n");
-    setColor(7);
-
-    printf("Nom : ");
-    scanf(" %[^\n]", nom);
-    printf("Mot de passe : ");
-    saisirMotDePasse(motdepasse, sizeof(motdepasse)); // <-- mot de passe ici
-
-    FILE *f = fopen("clients.csv", "r");
+// Affiche les réservations du client connecté
+void consulterReservations(const char *identifiant) {
+    FILE *f = fopen("reservations.csv", "r");
     if (!f) {
         setColor(12);
-        printf("Erreur d'ouverture du fichier clients.csv\n");
+        printf("Aucune réservation trouvée.\n");
         setColor(7);
-        return 0;
+        return;
     }
+    ServiceReservation r;
     char ligne[512];
+    float total = 0;
+    int trouve = 0;
+    setColor(11);
+    printf("=== Vos réservations ===\n");
+    setColor(7);
     while (fgets(ligne, sizeof(ligne), f)) {
-        Client c;
-        sscanf(ligne, "%[^,],%[^,],%d,%[^,],%[^,],%[^,],%[^,],%[^,],%[^,\n]",
-            c.nom, c.prenom, &c.age, c.profession, c.identifiant, c.motdepasse, // <-- mot de passe ici
-            c.type_chambre, c.date_arrivee, c.date_depart);
-        if (strcmp(c.nom, nom) == 0 && strcmp(c.motdepasse, motdepasse) == 0) { // <-- mot de passe ici
-            strcpy(identifiant, c.identifiant);
+        sscanf(ligne, "%[^,],%[^,],%[^,],%[^,],%[^,],%f,%d",
+            r.identifiant, r.nom, r.service, r.chambre, r.date, &r.prix, &r.payee);
+        if (strcmp(r.identifiant, identifiant) == 0) {
             trouve = 1;
-            break;
+            printf("Service : %s | Chambre : %s | Date : %s | Prix : %.0f FCFA | Payée : %s\n",
+                r.service, r.chambre, r.date, r.prix, r.payee ? "Oui" : "Non");
+            total += r.prix;
         }
     }
     fclose(f);
-
     if (trouve) {
-        setColor(10);
-        printf("Connexion réussie !\n");
+        setColor(14);
+        printf("\nPrix total de vos réservations : %.0f FCFA\n", total);
         setColor(7);
-        return 1;
     } else {
         setColor(12);
-        printf("Nom ou mot de passe incorrect.\n");
+        printf("Aucune réservation trouvée pour votre identifiant.\n");
         setColor(7);
-        return 0;
     }
+    printf("Appuyez sur une touche pour revenir au menu client...");
+    getch();
 }
 
+// Affiche toutes les réservations
+void afficherReservations() {
+    FILE *f = fopen("reservations.csv", "r");
+    if (!f) {
+        setColor(12); printf("❌ Impossible d'ouvrir reservations.csv\n"); setColor(7);
+        return;
+    }
+    char identifiant[100], nom[100], service[100], chambre[100], date[100];
+    float prix;
+    int payee;
+    setColor(11); printf("=== Liste des Réservations ===\n"); setColor(7);
+    int nb = 0;
+    while (fscanf(f, " %[^,],%[^,],%[^,],%[^,],%[^,],%f,%d",
+                  identifiant, nom, service, chambre, date, prix, &payee) == 7) {
+        printf("ID: %s | Client: %s | Service: %s | Chambre: %s | Date: %s | Prix: %.0f FCFA | Payée: %s\n",
+               identifiant, nom, service, chambre, date, prix, payee ? "Oui" : "Non");
+        nb++;
+    }
+    fclose(f);
+    if (nb == 0) {
+        setColor(12); printf("Aucune réservation trouvée.\n"); setColor(7);
+    }
+    printf("\nAppuyez sur une touche pour revenir au menu client...");
+    getch();
+}
+
+// Menu principal client
 void MenuClient() {
     int choix = 0;
     int continuer = 1;
@@ -528,10 +514,11 @@ void MenuClient() {
                             "Réserver un service 🛎️",
                             "Payer une réservation 💳",
                             "Consulter mes réservations 📄",
+                            "Afficher toutes les réservations 📋",
                             "Quitter le menu client ❌"
                         };
 
-                        for (int i = 0; i < 4; i++) {
+                        for (int i = 0; i < 5; i++) {
                             if (i == choixClient) {
                                 setColor(13);
                                 printf("→ %s\n", optionsClient[i]);
@@ -544,32 +531,38 @@ void MenuClient() {
                         int key = _getch();
                         if (key == 224 || key == 0) {
                             key = _getch();
-                            if (key == 72) choixClient = (choixClient == 0) ? 3 : choixClient - 1;
-                            else if (key == 80) choixClient = (choixClient == 3) ? 0 : choixClient + 1;
+                            if (key == 72) choixClient = (choixClient == 0) ? 4 : choixClient - 1;
+                            else if (key == 80) choixClient = (choixClient == 4) ? 0 : choixClient + 1;
                         } else if (key == 13) {
                             switch (choixClient) {
                                 case 0:
-                                    reservation();
+                                    reservation(identifiant);
                                     printf("\nAppuyez sur une touche pour revenir au menu client...");
                                     getch();
-                                    system("cls"); // Nettoie le terminal après l'opération
+                                    system("cls");
                                     break;
                                 case 1:
                                     paiement();
                                     printf("\nAppuyez sur une touche pour revenir au menu client...");
                                     getch();
-                                    system("cls"); // Nettoie le terminal après l'opération
+                                    system("cls");
                                     break;
                                 case 2:
                                     consulterReservations(identifiant);
-                                    system("cls"); // Nettoie le terminal après consultation
+                                    system("cls");
                                     break;
                                 case 3:
+                                    afficherReservations();
+                                    printf("\nAppuyez sur une touche pour revenir au menu client...");
+                                    getch();
+                                    system("cls");
+                                    break;
+                                case 4:
                                     setColor(10);
                                     printf("Retour au menu principal...\n");
                                     setColor(7);
                                     continuerClient = 0;
-                                    system("cls"); // Nettoie le terminal en quittant le menu client
+                                    system("cls");
                                     break;
                             }
                         }
@@ -583,3 +576,4 @@ void MenuClient() {
         }
     }
 }
+

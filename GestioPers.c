@@ -233,25 +233,29 @@ void ajouterMotDePasseSiNomExiste() {
     scanf(" %[^\n]", nom);
 
     FILE *f = fopen(FICHIER_EMPLOYES, "r");
-    FILE *mdpf = fopen(FICHIER_MDP, "a");
-    if (!f || !mdpf) { perror("Erreur"); return; }
+    FILE *temp = fopen("temp.csv", "w");
+    if (!f || !temp) { perror("Erreur"); return; }
 
-    while (fscanf(f, " %[^,],%[^,],%d,%d,%d,%[^\n]", e.Nom, e.Prenom, &e.Age, &e.Salaire, &e.Id, e.Poste) != EOF) {
+    while (fscanf(f, " %[^,],%[^,],%d,%d,%d,%[^,],%[^\n]", e.Nom, e.Prenom, &e.Age, &e.Salaire, &e.Id, e.Poste, e.MotDePasse) != EOF) {
         if (strcmp(e.Nom, nom) == 0) {
             found = 1;
             printf("Mot de passe : ");
             saisirMotDePasseMasque(mdp);
-            fprintf(mdpf, "%s,%s\n", nom, mdp);
-            setColor(10); printf("✅ Mot de passe ajouté.\n"); setColor(7);
-            break;
+            strcpy(e.MotDePasse, mdp);
+            setColor(10); printf("✅ Mot de passe ajouté/modifié.\n"); setColor(7);
         }
+        fprintf(temp, "%s,%s,%d,%d,%d,%s,%s\n", e.Nom, e.Prenom, e.Age, e.Salaire, e.Id, e.Poste, e.MotDePasse);
     }
+
+    fclose(f); fclose(temp);
 
     if (!found) {
         setColor(12); printf("❌ Employé introuvable.\n"); setColor(7);
+        remove("temp.csv");
+    } else {
+        remove(FICHIER_EMPLOYES);
+        rename("temp.csv", FICHIER_EMPLOYES);
     }
-
-    fclose(f); fclose(mdpf);
 }
 
 // 🌐 Menu Administrateur avec navigation
